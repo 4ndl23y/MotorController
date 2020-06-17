@@ -47,21 +47,43 @@ void PIDcalculate(void);
 void printValue(void);		
 void displayPrint(uint8_t number, uint8_t dpPosition);
 
-volatile uint8_t PulseAllowed = 0;
-volatile uint32_t MotorPulse = 0;
-volatile uint32_t HallDeltaTime = HALLDELTAMAX;
-uint32_t RPMset = 0;
+struct buttonStruct{
+    uint8_t on;    // display printing value
+    //uint32_t time;   // Time that the button pressed 
+} but1, but2;
 
-arm_pid_instance_f32 PID;
-int32_t PIDoutputMax;
-int32_t PIDoutputMin;
+struct displayState{
+    uint8_t mode;
+    //uint8_t value;
+} disp;
+
+struct motorState{
+    volatile uint8_t 
+    on: 1,          // pulse allowed
+    calcPID: 1,     // calculate new PID value
+    savePID: 4;     // if savePID == 5 then save kp,ki,kd to flash 
+    
+    uint16_t pulse; // pulse length (0..10000)
+    uint16_t rpmMin;
+    uint16_t rpmMax;
+    uint32_t rpmSet;
+    
+    arm_pid_instance_f32 PID;
+    uint16_t PIDoutMax;
+    uint16_t PIDoutMin;   
+} m;                // m - for Motor
+
+volatile uint32_t HallDeltaTime = HALLDELTAMAX;
+
 void PIDreset(void);
-volatile uint8_t PIDcalculateFlag = 0;
-uint8_t SoftStartFlag = 0;
-		
-uint8_t Mode = 0;   // Printing value by default mode(0: RPM)
+void PIDset(void);
 		
 uint16_t KF = 1000; // Second zero crossing time tuning
+
+#define CONFIGFLASHADDR 0x0801F800
+void PIDsave();
+void writeVal(float32_t k, uint8_t addr);
+void readVal(float32_t* k, uint8_t addr);
 
 #ifdef SERIALDEBUG
 void USARTprint(char* format, ...);

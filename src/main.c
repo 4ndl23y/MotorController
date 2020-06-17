@@ -16,20 +16,21 @@ int main(void)
     	
 	__enable_irq();  
 	
-	PIDreset();
+	
+	PIDset();
 	
 	TIM3->CR1 |= TIM_CR1_CEN;		// Hall sensor start
 	TIM16->CR1 |= TIM_CR1_CEN;		// Hall wachdog timer start
 	
 	while(1)
 	{
-		if(PIDcalculateFlag){
+		if(m.calcPID){
 			PIDcalculate();  	// calculate new motorPulse value
-			PIDcalculateFlag = 0;
+			m.calcPID = 0;
 		}
         
-        printValue();
-		
+        printValue();   //print Task
+        
 	}
 } 
 
@@ -39,65 +40,49 @@ void PIDcalculate()
 	int32_t RPMerror;
 	int32_t PIDoutput;
 	
-	arm_pid_init_f32(&PID, 1);
-	
-	if(Mode == 6){	
-		PIDreset();
-		Mode = 0;
+	if(disp.mode == 6){	
+		//PIDreset();
+        arm_pid_init_f32(&m.PID, 1);
+		disp.mode = 0;
 	}
 	
-	PulseAllowed = (RPMset >= MINRPM ? 1 : 0);		// check ON/OFF
+	RPMerror = HallDeltaTime - 30000000 / (m.rpmSet + 1);	// PID error
 	
-	RPMerror = HallDeltaTime - 30000000 / (RPMset + 1);	// 
-    //RPMerror = RPMset - 30000000 / (HallDeltaTime + 1);
-	
-	PIDoutput = (int32_t)(arm_pid_f32(&PID, RPMerror));	// calculate
-	
-	if(PIDoutput > PIDoutputMax){				// check MIN/MAX
-		PIDoutput = PIDoutputMax;
-                PID.state[2] = PIDoutputMax;
+	PIDoutput = (int32_t)(arm_pid_f32(&m.PID, RPMerror));	// calculate
+    
+	if(PIDoutput > m.PIDoutMax){				// check MIN/MAX
+		PIDoutput = m.PIDoutMax;
+        m.PID.state[2] = m.PIDoutMax;
 	}
-	else if(PIDoutput < PIDoutputMin){
-		PIDoutput = PIDoutputMin;
-                PID.state[2] = PIDoutputMin;
+	else if(PIDoutput < m.PIDoutMin){
+		PIDoutput = m.PIDoutMin;
+        m.PID.state[2] = m.PIDoutMin;
 	}
     
 	#ifdef TEST     // for functional testing define TEST
         MotorPulse = (uint16_t)(RPMset / 100);
     #else
-        if(SoftStartFlag){
-            static uint16_t softStartCounter = 0;
-            if(softStartCounter < 60000 && MotorPulse < PIDoutput){
-                MotorPulse+=20;
-                softStartCounter++;
-            }
-            else{
-                SoftStartFlag = 0;
-                softStartCounter = 0;
-            }
-            //(MotorPulse < PIDoutput) ? MotorPulse+=15 : (SoftStartFlag = 0);
-        }
-        else{
-            MotorPulse = (uint16_t)(PIDoutput);
-        }
+        m.pulse = (uint16_t)(PIDoutput);
     #endif
+        
+    m.on = (m.rpmSet >= MINRPM ? 1 : 0);		// check ON/OFF
     
     #ifdef SERIALDEBUG
-	if(UARTonFlag){
-		USARTprint("$%d %d, %d, %d;", RPMset, 30000000/HallDeltaTime, RPMerror, MotorPulse);
-	}
+        if(UARTonFlag){
+            USARTprint("$%d %d, %d, %d;", m.rpmSet, 30000000/HallDeltaTime, RPMerror, m.pulse);
+        }
     #endif
 }
 
 void printValue(){
     static uint16_t i = 0;
     if(i > 6000){
-        switch(Mode){		// Menu
-            case 0:  displayPrint(RPMset / 1000, 0);		    break;
-            case 1:  displayPrint((uint8_t)(PID.Kp * 10), 1);	break;
-            case 2:  displayPrint((uint8_t)(PID.Ki * 100), 2);	break;
-            case 3:  displayPrint((uint8_t)(PID.Kd * 100), 3);	break;
-            case 4:  displayPrint(KF / 100, 1);			        break;
+        switch(disp.mode){		// Menu
+            case 0:  displayPrint(m.rpmSet / 1000, 0);		    break;
+            case 1:  displayPrint((uint8_t)(m.PID.Kp * 10), 1);	break;
+            case 2:  displayPrint((uint8_t)(m.PID.Ki * 100), 2);	break;
+            case 3:  displayPrint((uint8_t)(m.PID.Kd * 100), 3);	break;
+            case 4:  displayPrint(m.savePID, 1);			        break;
             default: displayPrint(99, 3);
         }
         i = 0;
@@ -111,7 +96,7 @@ void displayPrint(uint8_t number, uint8_t dpPosition)
 
 	if(digit){						// write to 1 digit
 		number = number / 10;
-		GPIOA->BSRR = NumbRegA;				// reset all
+		GPIOA->BSRR = NumbRegA;		// reset all
 		GPIOB->BSRR = NumbRegB;
 		GPIOA->BSRR = ((uint32_t)(NumbRegAset[number]) << 16); 	// print number to digit
 		GPIOB->BSRR = ((uint32_t)(NumbRegBset[number]) << 16) 
@@ -133,43 +118,84 @@ void displayPrint(uint8_t number, uint8_t dpPosition)
 
 void PIDreset()
 {
-	PID.Kp = 0.01;
-	PID.Ki = 0.0;
-	PID.Kd = 0.0;
-	PIDoutputMax = 9000; 			// WARN: absolute max 10000!
-	PIDoutputMin = 0;
-	arm_pid_init_f32(&PID, 1);		// DSP lib PID init
+	m.PID.Kp = 1.0;
+	m.PID.Ki = 0.0;
+	m.PID.Kd = 0.0;
+	m.PIDoutMax = 9000; 			// WARN: absolute max 10000!
+	m.PIDoutMin = 0;
+	arm_pid_init_f32(&m.PID, 1);		// DSP lib PID init
 }
 
-//___save_settings_to_flash________________________________
-void eraseFlashPage(uint16_t pageAddr) {
-	while(FLASH->SR & FLASH_SR_BSY);   // Whaiting, if flash not ready
-	if(FLASH->SR & FLASH_SR_EOP){     
-		FLASH->SR = FLASH_SR_EOP;
-	}
-	FLASH->CR |= FLASH_CR_PER;
-	FLASH->AR = pageAddr;               // Any address, that belongs to erasable page
-	FLASH->CR |= FLASH_CR_STRT;
-	while(!(FLASH->SR & FLASH_SR_EOP));
-	FLASH->SR = FLASH_SR_EOP;
-	FLASH->CR &= ~FLASH_CR_PER;
+void PIDset()
+{
+	readVal(&m.PID.Kp, 0); 
+	readVal(&m.PID.Ki, 8);
+	readVal(&m.PID.Kd, 16);
+	m.PIDoutMax = 9000; 			// WARN: absolute max 10000!
+	m.PIDoutMin = 0;
+	arm_pid_init_f32(&m.PID, 1);		// DSP lib PID init
 }
 
-//data - указатель на записываемые данные
-//address - адрес во flash
-//count - количество записываемых байт, должно быть кратно 2
-void writeFlashPage(unsigned char* data, uint16_t address, uint16_t dataSize) {
-    while(FLASH->SR & FLASH_SR_BSY);
-	if(FLASH->SR & FLASH_SR_EOP){
-		FLASH->SR = FLASH_SR_EOP;
+//___save_settings_to_flash_________________________________
+void PIDsave()
+{
+    m.savePID++;
+    if(m.savePID > 5){
+		m.savePID = 0;
+		disp.mode = 0;
+		
+        while(FLASH->SR & FLASH_SR_BSY);   // Whaiting, if flash not ready
+        if(FLASH->SR & FLASH_SR_EOP){     
+            FLASH->SR = FLASH_SR_EOP;
+        }
+        FLASH->CR |= FLASH_CR_PER;
+        FLASH->AR = CONFIGFLASHADDR;       // Any address, that belongs to erasable page
+        FLASH->CR |= FLASH_CR_STRT;
+        while(!(FLASH->SR & FLASH_SR_EOP));
+        FLASH->SR = FLASH_SR_EOP;
+        FLASH->CR &= ~FLASH_CR_PER;
+        while(FLASH->SR & FLASH_SR_BSY);
+        if(FLASH->SR & FLASH_SR_EOP){
+            FLASH->SR = FLASH_SR_EOP;
+        }
+        FLASH->CR |= FLASH_CR_PG;
+
+		writeVal(m.PID.Kp, 0);
+		writeVal(m.PID.Ki, 8);
+		writeVal(m.PID.Kd, 16);
+		
+        FLASH->SR = FLASH_SR_EOP;
+        FLASH->CR &= ~(FLASH_CR_PG);
+    }
+}
+
+void writeVal(float32_t k, uint8_t addr)
+{
+	union float32ToUint16{
+		float32_t k;
+		uint16_t kChar[2];
+	} kToFlash;
+
+	kToFlash.k = k;
+	for(uint8_t i = 0; i < 2; i++){
+        *(volatile uint16_t*)(CONFIGFLASHADDR + addr + i * 2) = kToFlash.kChar[i];        
+        while(!(FLASH->SR & FLASH_SR_EOP));
+        FLASH->SR = FLASH_SR_EOP;
 	}
-	FLASH->CR |= FLASH_CR_PG;
-	for(uint16_t i = 0; i < dataSize; i += 2){
-		*(volatile uint8_t*)(address + i) = (((uint8_t)data[i + 1]) << 8) + data[i];
-		while(!(FLASH->SR & FLASH_SR_EOP));
-		FLASH->SR = FLASH_SR_EOP;
+}
+
+void readVal(float32_t* k, uint8_t addr)
+{
+	union float32ToUint16{
+		float32_t k;
+		uint16_t kChar[2];
+	} kFromFlash;
+	
+	for(uint8_t i = 0; i < 2; i++){
+		kFromFlash.kChar[i] = *(uint16_t*)(CONFIGFLASHADDR + addr + i * 2);
 	}
-	FLASH->CR &= ~(FLASH_CR_PG);
+		
+	*k = kFromFlash.k;
 }
 //___save_settings_to_flash_end_____________________________
 
@@ -206,11 +232,42 @@ void UARTdataSend(char* str)
 //_____Hall_input_capture_tim_interrupt_____________________________________________________________
 void TIM3_IRQHandler(void)
 {	 
-	HallDeltaTime = TIM3->CCR1;			// get hall input capture (delta time)
+	HallDeltaTime = TIM3->CCR1;	    // get hall input capture (delta time)
 	TIM3->CNT = 0;					// reset hall tim
 	TIM16->CNT = 0;					// reset hall wachdog TIM16
 	TIM3->SR &= ~TIM_SR_CC1OF;
 	TIM3->SR &= ~TIM_SR_UIF;
+}
+//_____tim_tinterrupt__________________________________________________________________
+void TIM17_IRQHandler()	
+{
+	if(but1.on && but2.on){
+        disp.mode = (disp.mode < 4 ? disp.mode+1 : 0);
+        m.savePID = 0;
+    }
+    else if(but2.on){
+        switch(disp.mode){
+			case 0: m.rpmSet < 100000 ? m.rpmSet += 1000 : 0; break; // speed++
+			case 1: m.PID.Kp += 0.1;    break;
+			case 2: m.PID.Ki += 0.01;   break;
+			case 3: m.PID.Kd += 0.01;   break;
+            case 4: PIDsave();          break;  // Press 5 times to save Kp, Ki, Kd
+		}
+    }
+    else if(but1.on){
+        switch(disp.mode){
+			case 0: m.rpmSet > 1000 ? m.rpmSet -= 1000 : 0; break; // speed--
+			case 1: m.PID.Kp -= 0.1;    break;
+			case 2: m.PID.Ki -= 0.01;   break;
+			case 3: m.PID.Kd -= 0.01;   break;
+            case 4: PIDset();           break;
+		}
+    }
+    but1.on = 0;
+    but2.on = 0;
+    TIM17->CR1 &= ~TIM_CR1_CEN;
+	TIM17->SR &= ~TIM_SR_CC1IF;
+	TIM17->SR &= ~TIM_SR_UIF;
 }
 //_____Hall_wachdog_tim_tinterrupt__________________________________________________________________
 void TIM16_IRQHandler()	
@@ -223,55 +280,35 @@ void TIM16_IRQHandler()
 //_____Zero_Cross_detection_handler_by_falling_and_rising___________________________________________
 void EXTI0_IRQHandler(void)				
 {			
-	if(PulseAllowed){
+	if(m.on){
 		if(!(GPIOB->IDR & GPIO_IDR_0)){         // First or second zero crossing per period
-			TIM2->CCR4 = WAVELEN - MotorPulse - MOTORPULSELEN;	// time delay before pulse
-			TIM2->ARR = WAVELEN - MotorPulse;		
+			TIM2->CCR4 = WAVELEN - m.pulse - MOTORPULSELEN;	// time delay before pulse
+			TIM2->ARR = WAVELEN - m.pulse;		
 		}else{
-			TIM2->CCR4 = WAVELEN - MotorPulse - KF - MOTORPULSELEN;
-			TIM2->ARR = WAVELEN - MotorPulse - KF;
+			TIM2->CCR4 = WAVELEN - m.pulse - KF - MOTORPULSELEN;
+			TIM2->ARR = WAVELEN - m.pulse - KF;
 		}			
 		TIM2->CNT = 0;
 		TIM2->EGR |= TIM_EGR_UG;		// update timer settings
 		TIM2->CR1 |= TIM_CR1_CEN; 		// start motorPulse timer
 	}
-	PIDcalculateFlag = 1;				// calculate new PID value flag
+	m.calcPID = 1;				// calculate new PID value flag
 	EXTI->PR |= EXTI_PR_PR0;
 }
 
 //_____Button1_handler______________________________________________________________________________
 void EXTI2_TSC_IRQHandler(void)	
 {		
-	if(GPIOB->IDR & GPIO_IDR_10){		// button1 pressed while button2 was pressed
-		Mode = (Mode < 5 ? Mode + 1 : 0);
-	}else{
-		switch(Mode){
-			case 0: RPMset >= 1000 ? (RPMset -= 1000) : 0; 	break; // speed--
-			case 1: PID.Kp -= 0.1; 			    break;
-			case 2: PID.Ki -= 0.01; 			break;
-			case 3: PID.Kd -= 0.01; 			break;
-			case 4: KF -= 50; 				break;
-			default: ;						// error
-		}
-	}
-	EXTI->PR |= EXTI_PR_PR2;
+	but1.on = 1;
+    TIM17->CR1 |= TIM_CR1_CEN;
+    EXTI->PR |= EXTI_PR_PR2;
 }
 
 //_____Button2_handler______________________________________________________________________________
 void EXTI15_10_IRQHandler(void)
 {		
-	if(GPIOA->IDR & GPIO_IDR_2){ 		// button2 pressed while button1 was pressed
-		Mode = 6;	// kp, ki, kd, update Mode
-	}else{	
-		switch(Mode){
-			case 0: RPMset < 60000 ? (RPMset += 1000, SoftStartFlag = 1) : 0; 	break; // speed++
-			case 1: PID.Kp += 0.1;  			break;
-			case 2: PID.Ki += 0.01; 			break;
-			case 3: PID.Kd += 0.01; 			break;
-			case 4:	KF += 50; 				break;
-			default: ;						//error
-		}
-	}
+    but2.on = 1;
+    TIM17->CR1 |= TIM_CR1_CEN;
 	EXTI->PR |= EXTI_PR_PR10;
 }
 //___Handler_end____________________________________________________________________________________
@@ -312,6 +349,7 @@ void RCC_Init()
 	RCC->AHBENR  |= RCC_AHBENR_GPIOBEN;
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+    RCC->APB2ENR |= RCC_APB2ENR_TIM17EN;
 	RCC->APB2ENR |= RCC_APB2ENR_TIM16EN;
 	RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
@@ -345,19 +383,27 @@ void TIM_Init()
 	TIM3->PSC = 64 - 1;
 	TIM3->ARR = 60000 - 1;
 	TIM3->CCMR1 |= TIM_CCMR1_CC1S_0			// CC1 channel, IC1 is mapped on TI1 (01)
-		    | TIM_CCMR1_IC1F_1
-		    | TIM_CCMR1_IC1F_3;			// filter (0011)
+                | TIM_CCMR1_IC1F_1
+                | TIM_CCMR1_IC1F_3;			// filter (0011)
 	TIM3->CCER |= TIM_CCER_CC1P;			// by rising edge
 	TIM3->DIER |= TIM_DIER_CC1IE;			// Capture/Compare interrupt enable
 	TIM3->CCER |= TIM_CCER_CC1E;			// capture compare enable
 	NVIC_EnableIRQ(TIM3_IRQn);
 	NVIC_SetPriority(TIM3_IRQn, 2);
 
+    //_____Task_timer____counter_mode_no_output_TIM15__________________________________________
+	TIM17->PSC = 64000 - 1;
+	TIM17->ARR = 200;	
+	TIM17->DIER |= TIM_DIER_CC2IE			// interrupt enable
+                | TIM_DIER_UIE;
+	NVIC_EnableIRQ(TIM17_IRQn);
+	NVIC_SetPriority(TIM17_IRQn, 3);
+    
 	//_____HALL_wachdog_counter_mode_no_output_TIM16____________________________________________
 	TIM16->PSC = 64 - 1;
 	TIM16->ARR = HALLDELTAMAX - 1;		
 	TIM16->DIER |= TIM_DIER_CC2IE			// interrupt enable
-		    | TIM_DIER_UIE;
+                | TIM_DIER_UIE;
 	NVIC_EnableIRQ(TIM16_IRQn);
 	NVIC_SetPriority(TIM16_IRQn, 2);
 }
