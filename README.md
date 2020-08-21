@@ -11,12 +11,12 @@ It includes hardware part, that exists of .schdoc and .pcbdoc;
 
 ![imgtest1](./pic/6_inventor_model_all.png)
 
-<img src="pic/4_PCB_3D.png" width="50%">
+<img src="pic/4_PCB_3D.jpg" width="50%">
 
 
 ### Schematic
 
-![imgtest2](./pic/1_sch.jpg)
+![imgtest2](./pic/1_sch.png)
 
 
 ### PCB
