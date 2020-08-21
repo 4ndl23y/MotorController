@@ -3,7 +3,6 @@
 
 int main(void)
 {
-	for(uint32_t d = 0; d < 800000; d++); 	// just wait for voltage stabilization
 	
 	RCC_Init();
 	TIM_Init();
@@ -45,8 +44,9 @@ void PIDcalculate()
         arm_pid_init_f32(&m.PID, 1);
 		disp.mode = 0;
 	}
-	
+        
 	RPMerror = HallDeltaTime - 30000000 / (m.rpmSet + 1);	// PID error
+    // 30000000 - max revolutions per minute * 1000 - just constant
 	
 	PIDoutput = (int32_t)(arm_pid_f32(&m.PID, RPMerror));	// calculate
     
@@ -68,9 +68,7 @@ void PIDcalculate()
     m.on = (m.rpmSet >= MINRPM ? 1 : 0);		// check ON/OFF
     
     #ifdef SERIALDEBUG
-        if(UARTonFlag){
             USARTprint("$%d %d, %d, %d;", m.rpmSet, 30000000/HallDeltaTime, RPMerror, m.pulse);
-        }
     #endif
 }
 
@@ -83,7 +81,7 @@ void printValue(){
             case 2:  displayPrint((uint8_t)(m.PID.Ki * 100), 2);	break;
             case 3:  displayPrint((uint8_t)(m.PID.Kd * 100), 3);	break;
             case 4:  displayPrint(m.savePID, 1);			        break;
-            default: displayPrint(99, 3);
+            default: ;
         }
         i = 0;
     }
@@ -260,7 +258,7 @@ void TIM17_IRQHandler()
 			case 1: m.PID.Kp -= 0.1;    break;
 			case 2: m.PID.Ki -= 0.01;   break;
 			case 3: m.PID.Kd -= 0.01;   break;
-            case 4: PIDset();           break;
+            case 4: PIDset();           break; 
 		}
     }
     but1.on = 0;
@@ -270,7 +268,7 @@ void TIM17_IRQHandler()
 	TIM17->SR &= ~TIM_SR_UIF;
 }
 //_____Hall_wachdog_tim_tinterrupt__________________________________________________________________
-void TIM16_IRQHandler()	
+void TIM16_IRQHandler()
 {
 	HallDeltaTime = HALLDELTAMAX;
 	TIM16->SR &= ~TIM_SR_CC1IF;
@@ -460,7 +458,7 @@ void UART_Init()
 	USART1->CR1 = 0;	
 	USART1->CR2 = 0;			
 	USART1->CR1 |= USART_CR1_TE 	// TX enable
-		        | USART_CR1_RE;		// RX enable
+		        | USART_CR1_RE;		// RX enable 
 	USART1->CR1 |=  USART_CR1_UE;   // USART enable
 }
 

@@ -1,8 +1,8 @@
 #ifndef _main_h
 #define _main_h
 
-//#define TEST
-#define SERIALDEBUG
+//#define TEST   //define for functional testing
+#define SERIALDEBUG //define for serial debug
 
 #include "stm32f3xx.h"
 #include "arm_math.h"
@@ -88,9 +88,8 @@ void readVal(float32_t* k, uint8_t addr);
 #ifdef SERIALDEBUG
 void USARTprint(char* format, ...);
 void UARTdataSend(char* str);
-char rxBuff[BUFFSIZE+1];
+//char rxBuff[BUFFSIZE+1];
 char txBuff[BUFFSIZE+1];
-uint8_t UARTonFlag = 1; 
 #endif
 
 #endif
