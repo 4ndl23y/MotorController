@@ -1,0 +1,20 @@
+
+*.PrjPcb
+Project Logs for MotorController/
+History/
+__Previews/
+
+Software/DebugConfig
+Software/Listings
+Software/Objects
+Software/*.uvprojx
+Software/*.uvoptx
+Software/*.username
+
+#! Software/inc/*.h
+#Software/inc/
+
+#Software/src/
+#! Software/src/*.c
+#! Software/src/*.cpp
+
