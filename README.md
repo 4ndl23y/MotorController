@@ -11,30 +11,32 @@ It includes hardware part, that exists of .schdoc and .pcbdoc;
 
 ![imgtest1](./pic/6_inventor_model_all.png)
 
-![imgtest1](./pic/4_PCB_3D.png =600x)
+<img src="pic/4_PCB_3D.png" width="70%">
 
 
 ### Schematic
 
-![imgtest2](./pic/1_sch.jpg =400x)
+<img src="pic/1_sch.jpg " width="100%">
 
 
 ### PCB
 
-![imgtest3](./pic/2_traced_pcb.png =250x)
+<img src="pic/2_traced_pcb.png" width="60%">
 
 
 ### Fusion simulation
 
-![giftest](./pic/1819Hz.gif =250x)
+![giftest](./pic/1819Hz.gif)
+
+<img src="pic/1819Hz.gif" width="80%">
 
 
 ### PCB manufacturing
 
 
-<img src="pic/10_pic.jpg" width="400">
+<img src="pic/10_pic.jpg" width="50%">
 
 
 ### Functional testing
 
-<img src="pic/8_pic.jpg" width="30%"> <img src="pic/9_pic.jpg" width="300px">
+<img src="pic/8_pic.jpg" width="50%"> <img src="pic/9_pic.jpg" width="50%">
